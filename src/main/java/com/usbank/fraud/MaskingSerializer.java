@@ -14,28 +14,35 @@ public class MaskingSerializer extends JsonSerializer<String> {
     }
 
     @Override
-    public void serialize(String value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+    private void serializeValue(Object value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
         if (value == null) {
             gen.writeNull();
-            return;
+        } else if (value instanceof String str) {
+            gen.writeString(applyMask(str));
+        } else if (value instanceof Number num) {
+            gen.writeString(applyMask(num.toString())); // ← Mask numbers as strings
+        } else if (value instanceof Collection<?> collection) {
+            gen.writeStartArray();
+            for (Object item : collection) {
+                serializeValue(item, gen, serializers);
+            }
+            gen.writeEndArray();
+        } else if (value.getClass().isArray()) {
+            gen.writeStartArray();
+            int length = Array.getLength(value);
+            for (int i = 0; i < length; i++) {
+                serializeValue(Array.get(value, i), gen, serializers);
+            }
+            gen.writeEndArray();
+        } else if (value instanceof Map<?, ?> map) {
+            gen.writeStartObject();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                gen.writeFieldName(String.valueOf(entry.getKey()));
+                serializeValue(entry.getValue(), gen, serializers);
+            }
+            gen.writeEndObject();
+        } else {
+            gen.writeObject(value); // fallback for unknown types
         }
-
-        int showFirst = mask.showFirst();
-        int showLast = mask.showLast();
-        char maskChar = mask.maskChar();
-        int len = value.length();
-
-        if (showFirst + showLast >= len) {
-            gen.writeString(value);
-            return;
-        }
-
-        StringBuilder masked = new StringBuilder();
-        masked.append(value, 0, showFirst);
-        for (int i = 0; i < len - showFirst - showLast; i++) {
-            masked.append(maskChar);
-        }
-        masked.append(value, len - showLast, len);
-        gen.writeString(masked.toString());
     }
 }
